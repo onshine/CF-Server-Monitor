@@ -971,22 +971,15 @@ export async function getLatestMetrics(db, serverId) {
 
 export async function getLatestMetricsForAllServers(db) {
   try {
-    const { results } = await db.prepare(`
-      SELECT mh.*
-      FROM metrics_history mh
-      INNER JOIN (
-        SELECT server_id, MAX(timestamp) as max_ts
-        FROM metrics_history
-        GROUP BY server_id
-      ) latest ON mh.server_id = latest.server_id AND mh.timestamp = latest.max_ts
-    `).all();
-    
-    const map = new Map();
-    for (const row of results) {
-      map.set(row.server_id, row);
-    }
-    
-    return map;
+    const { results: servers } = await db.prepare('SELECT id FROM servers').all();
+
+    const entries = await Promise.all(
+      servers.map(s =>
+        getLatestMetrics(db, s.id).then(metrics => [s.id, metrics])
+      )
+    );
+
+    return new Map(entries.filter(([, m]) => m !== null));
   } catch (e) {
     console.error('获取所有服务器最新指标数据失败:', e);
     return new Map();
